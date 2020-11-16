@@ -10,6 +10,7 @@ The Private Link Service (PLS) as shown in the Provider Network performs [Destin
 
 # Connectivity from Managed/Secure VNET to a server in another VNET or On-Premises server
 If you want to connect from a private/managed subnet to an on-premise server or a server in another VNET as shown in the figure below which shows connectivity from Azure Data Factory (ADF) Managed Virtual Network to an on-premise SQL Server
+![Figure 1](images/Azure_ADF_FWD.png)
 1. Implementing the Forwarding Solution:
 ```
 # ALLOWED_IP_ADDRESS is the allowed IP Address from which you'll connect
