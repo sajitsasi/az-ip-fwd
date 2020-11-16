@@ -42,6 +42,10 @@ az network nsg create -g az-fwd-rg --name bastion-nsg
 # NOTE: ENTER FILL YOUR IP a.b.c.d/32 in the --source-address-prefix option
 az network nsg rule create -g az-fwd-rg --nsg-name bastion-nsg --name AllowSSH --direction inbound --source-address-prefix ${ALLOWED_IP_ADDRESSES} --destination-port-range 22 --access allow --priority 500 --protocol Tcp
 
+# Assign NSG to Bastion subnet
+az network vnet subnet update -g az-fwd-rg -n bast-subnet --vnet-name az-fwd-vnet --network-security-group bastion-nsg
+# Create Bastion VM
+az vm create -g az-fwd-rg --name bastionvm --image UbuntuLTS --admin-user azureuser --generate-ssh-keys --vnet-name az-fwd-vnet --subnet bast-subnet
 
 # Create Standard Internal Load Balancer
 az network lb create -g az-fwd-rg --name FWDILB --sku standard --vnet-name az-fwd-vnet --subnet fe-subnet --frontend-ip-name FrontEnd --backend-pool-name bepool
@@ -57,12 +61,16 @@ NIC_NAME=fwdvm1nic${RANDOM}
 az network nic create -g az-fwd-rg -n ${NIC_NAME} --vnet-name az-fwd-vnet --subnet be-subnet
 
 # Create backend forwarding Linux VM
-az vm create -g az-fwd-rg --name fwdvm1 --image UbuntuLTS --admin-user azureuser --generate-ssh-keys --nics ${NIC_NAME}
+az vm create -g az-fwd-rg --name natvm1 --image UbuntuLTS --admin-user azureuser --generate-ssh-keys --nics ${NIC_NAME}
 
 # Add NIC to LB
 az network nic ip-config address-pool --address-pool bepool --ip-config-name ipconfig1 --nic-name ${NIC_NAME} -g az-fwd-rg --lb-name FWDILB
-
 ```
+2. Creating Forwarding Rule to Endpoint
+   * Copy [ip_fwd.sh](ip_fwd.sh) to the Bastion VM and then to each of the  NAT VMs
+   * Run the script on each VM with the following options:
+     ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN/IP> -b 1433```
+     This will forward packets coming in on Ethernet Interface ```eth0``` on port ```1433``` to the ```Destination FQDN or IP of the on-prem SQL Server``` on port ```1433```
 
 
 
