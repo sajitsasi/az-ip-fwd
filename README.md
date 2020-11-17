@@ -24,55 +24,139 @@ az login
 az group create -n az-fwd-rg -l eastus
 
 # Create Forwarding VNET and backend subnet to host VMs
-az network vnet create -g az-fwd-rg -n az-fwd-vnet --address-prefixes 10.100.0.0/22 --subnet-name be-subnet --subnet-prefixes 10.100.0.0/24 -l eastus
+az network vnet create \
+   -g az-fwd-rg \
+   -n az-fwd-vnet \
+   --address-prefixes 10.100.0.0/22 \
+   --subnet-name be-subnet \
+   --subnet-prefixes 10.100.0.0/24 \
+   -l eastus
 # Create Frontend subnet for Standard Internal Load Balancer 
-az network vnet subnet create -g az-fwd-rg -n fe-subnet --vnet-name az-fwd-vnet --address-prefix 10.100.1.0/24 -l eastus
+az network vnet subnet create \
+   -g az-fwd-rg \
+   -n fe-subnet \
+   --vnet-name az-fwd-vnet \
+   --address-prefix 10.100.1.0/24 \
+   -l eastus
 
 # Create PLS subnet for Private Link Service
-az network vnet subnet create -g az-fwd-rg -n pls-subnet --vnet-name az-fwd-vnet --address-prefix 10.100.2.0/24 -l eastus
-az network vnet subnet update -g az-fwd-rg -n pls-subnet --vnet-name az-fwd-vnet --disable-private-link-service-network-policies true
+az network vnet subnet create \
+   -g az-fwd-rg \
+   -n pls-subnet \
+   --vnet-name az-fwd-vnet \
+   --address-prefix 10.100.2.0/24 \
+   -l eastus
+az network vnet subnet update \
+   -g az-fwd-rg \
+   -n pls-subnet \
+   --vnet-name az-fwd-vnet \
+   --disable-private-link-service-network-policies true
 
 # Create Bastion subnet for locked down Internet access
-az network vnet subnet create -g az-fwd-rg -n bast-subnet --vnet-name az-fwd-vnet --address-prefix 10.100.3.0/24 -l eastus
+az network vnet subnet create \
+   -g az-fwd-rg \
+   -n bast-subnet \
+   --vnet-name az-fwd-vnet \
+   --address-prefix 10.100.3.0/24 \
+   -l eastus
 
 # Create Network Security Group for locked down access to bast-subnet
 az network nsg create -g az-fwd-rg --name bastion-nsg
 
 # Create NSG rule to allow Internet access from your IP.
 # NOTE: ENTER FILL YOUR IP a.b.c.d/32 in the --source-address-prefix option
-az network nsg rule create -g az-fwd-rg --nsg-name bastion-nsg --name AllowSSH --direction inbound --source-address-prefix ${ALLOWED_IP_ADDRESSES} --destination-port-range 22 --access allow --priority 500 --protocol Tcp
+az network nsg rule create \
+   -g az-fwd-rg \
+   --nsg-name bastion-nsg \
+   --name AllowSSH \
+   --direction inbound \
+   --source-address-prefix ${ALLOWED_IP_ADDRESSES} \
+   --destination-port-range 22 \
+   --access allow \
+   --priority 500 \
+   --protocol Tcp
 
 # Assign NSG to Bastion subnet
-az network vnet subnet update -g az-fwd-rg -n bast-subnet --vnet-name az-fwd-vnet --network-security-group bastion-nsg
+az network vnet subnet update \
+   -g az-fwd-rg \
+   -n bast-subnet \
+   --vnet-name az-fwd-vnet \
+   --network-security-group bastion-nsg
 # Create Bastion VM
-az vm create -g az-fwd-rg --name bastionvm --image UbuntuLTS --admin-user azureuser --generate-ssh-keys --vnet-name az-fwd-vnet --subnet bast-subnet
+az vm create \
+   -g az-fwd-rg \
+   --name bastionvm \
+   --image UbuntuLTS \
+   --admin-user azureuser \
+   --generate-ssh-keys \
+   --vnet-name az-fwd-vnet \
+   --subnet bast-subnet
 
 # Create Standard Internal Load Balancer
-az network lb create -g az-fwd-rg --name FWDILB --sku standard --vnet-name az-fwd-vnet --subnet fe-subnet --frontend-ip-name FrontEnd --backend-pool-name bepool
+az network lb create \
+   -g az-fwd-rg \
+   --name FWDILB \
+   --sku standard \
+   --vnet-name az-fwd-vnet \
+   --subnet fe-subnet \
+   --frontend-ip-name FrontEnd \
+   --backend-pool-name bepool
 
 # Create a health probe to monitor the health of VMs using port 22
-az network lb probe create -g az-fwd-rg --lb-name FWDILB --name SSHProbe --protocol tcp --port 22
+az network lb probe create \
+   -g az-fwd-rg \
+   --lb-name FWDILB \
+   --name SSHProbe \
+   --protocol tcp \
+   --port 22
 
 # Create an LB rule to forward SQL packets on 1433 to backend NAT VM on 1433
-az network lb rule create -g az-fwd-rg --lb-name FWDILB --name OnPremSQL --protocol tcp --frontend-port 1433 --backend-port 1433 --frontend-ip-name FrontEnd --backend-pool-name bepool --probe-name SSHProbe
+az network lb rule create \
+   -g az-fwd-rg \
+   --lb-name FWDILB \
+   --name OnPremSQL \
+   --protocol tcp \
+   --frontend-port 1433 \
+   --backend-port 1433 \
+   --frontend-ip-name FrontEnd \
+   --backend-pool-name bepool \
+   --probe-name SSHProbe
 
 # Get ILB Resource ID
 FWD_ILB=$(az network lb show -g az-fwd-rg -n FWDILB --query frontendIpConfigurations[0].id -o tsv)
 # Create Private Link Service to ILB
-PLS_ID=$(az network private-link-service create -g az-fwd-rg -n pls2fwdilb --vnet-name az-fwd-vnet --subnet pls-subnet --lb-frontend-ip-configs ${FWD_ILB} --query id -o tsv)
+PLS_ID=$(az network private-link-service create -g az-fwd-rg -n pls2fwdilb --vnet-name az-fwd-vnet --subnet pls-subnet --lb-frontend-ip-configs ${FWD_ILB} -l eastus --query id -o tsv)
 
 # Create NIC for the VM
 NIC_NAME=fwdvm1nic${RANDOM}
-az network nic create -g az-fwd-rg -n ${NIC_NAME} --vnet-name az-fwd-vnet --subnet be-subnet
+az network nic create \
+   -g az-fwd-rg \
+   -n ${NIC_NAME} \
+   --vnet-name az-fwd-vnet \
+   --subnet be-subnet
 
 # Create backend forwarding Linux VM
-az vm create -g az-fwd-rg --name natvm1 --image UbuntuLTS --admin-user azureuser --generate-ssh-keys --nics ${NIC_NAME}
+az vm create \
+   -g az-fwd-rg \
+   --name natvm1 \
+   --image UbuntuLTS \
+   --admin-user azureuser \
+   --generate-ssh-keys \
+   --nics ${NIC_NAME}
 
 # Add NIC to LB
-az network nic ip-config address-pool --address-pool bepool --ip-config-name ipconfig1 --nic-name ${NIC_NAME} -g az-fwd-rg --lb-name FWDILB
+az network nic ip-config address-pool \
+   --address-pool bepool \
+   --ip-config-name ipconfig1 \
+   --nic-name ${NIC_NAME} \
+   -g az-fwd-rg \
+   --lb-name FWDILB
 
 # Print PLS ID to use for connection to this PLS
 echo "PLS ID is ${PLS_ID}"
+
+# Print Bastion VM Public IP
+echo "Bastion Public IP is: $(az vm show -d -g az-fwd-rg -n bastionvm --query publicIps -o tsv)"
 ```
 2. Creating Forwarding Rule to Endpoint
    * Copy [ip_fwd.sh](ip_fwd.sh) to the Bastion VM and then to each of the  NAT VMs
