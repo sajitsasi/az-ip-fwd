@@ -31,21 +31,21 @@ az network vnet create \
    --subnet-name be-subnet \
    --subnet-prefixes 10.100.0.0/24 \
    -l eastus
+
 # Create Frontend subnet for Standard Internal Load Balancer 
 az network vnet subnet create \
    -g az-fwd-rg \
    -n fe-subnet \
    --vnet-name az-fwd-vnet \
-   --address-prefix 10.100.1.0/24 \
-   -l eastus
+   --address-prefix 10.100.1.0/24 
 
 # Create PLS subnet for Private Link Service
 az network vnet subnet create \
    -g az-fwd-rg \
    -n pls-subnet \
    --vnet-name az-fwd-vnet \
-   --address-prefix 10.100.2.0/24 \
-   -l eastus
+   --address-prefix 10.100.2.0/24 
+
 az network vnet subnet update \
    -g az-fwd-rg \
    -n pls-subnet \
@@ -57,8 +57,7 @@ az network vnet subnet create \
    -g az-fwd-rg \
    -n bast-subnet \
    --vnet-name az-fwd-vnet \
-   --address-prefix 10.100.3.0/24 \
-   -l eastus
+   --address-prefix 10.100.3.0/24 
 
 # Create Network Security Group for locked down access to bast-subnet
 az network nsg create -g az-fwd-rg --name bastion-nsg
