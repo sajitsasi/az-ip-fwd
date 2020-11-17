@@ -153,7 +153,7 @@ az vm create \
    --nics ${NIC_NAME}
 
 # Add NIC to LB
-az network nic ip-config address-pool \
+az network nic ip-config address-pool add \
    --address-pool bepool \
    --ip-config-name ipconfig1 \
    --nic-name ${NIC_NAME} \
