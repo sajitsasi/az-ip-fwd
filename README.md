@@ -14,7 +14,7 @@ If you want to connect from a private/managed subnet to an on-premise server or 
 1. Implementing the Forwarding Solution:
 ```
 # ALLOWED_IP_ADDRESS is the allowed IP Address from which you'll connect
-# to the Bastion VM via SSH.
+# to the Bastion VM via SSH. Be sure to add the /32 CIDR at the end
 export ALLOWED_IP_ADDRESSES="aaa.bbb.ccc.ddd"
 
 # Login to Azure
