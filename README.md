@@ -125,7 +125,16 @@ az network lb rule create \
 # Get ILB Resource ID
 FWD_ILB=$(az network lb show -g az-fwd-rg -n FWDILB --query frontendIpConfigurations[0].id -o tsv)
 # Create Private Link Service to ILB
-PLS_ID=$(az network private-link-service create -g az-fwd-rg -n pls2fwdilb --vnet-name az-fwd-vnet --subnet pls-subnet --lb-frontend-ip-configs ${FWD_ILB} -l eastus --query id -o tsv)
+PLS_ID=$(
+   az network private-link-service create \
+      -g az-fwd-rg \
+      -n pls2fwdilb \
+      --vnet-name az-fwd-vnet \
+      --subnet pls-subnet \
+      --lb-frontend-ip-configs ${FWD_ILB} \
+      -l eastus \
+      --query id \
+      -o tsv)
 
 # Create NIC for the VM
 NIC_NAME=fwdvm1nic${RANDOM}
