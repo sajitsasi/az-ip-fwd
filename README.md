@@ -56,6 +56,11 @@ az network lb probe create -g az-fwd-rg --lb-name FWDILB --name SSHProbe --proto
 # Create an LB rule to forward SQL packets on 1433 to backend NAT VM on 1433
 az network lb rule create -g az-fwd-rg --lb-name FWDILB --name OnPremSQL --protocol tcp --frontend-port 1433 --backend-port 1433 --frontend-ip-name FrontEnd --backend-pool-name bepool --probe-name SSHProbe
 
+# Get ILB Resource ID
+FWD_ILB=$(az network lb show -g az-fwd-rg -n FWDILB --query frontendIpConfigurations[0].id -o tsv)
+# Create Private Link Service to ILB
+PLS_ID=$(az network private-link-service create -g az-fwd-rg -n pls2fwdilb --vnet-name az-fwd-vnet --subnet pls-subnet --lb-frontend-ip-configs ${FWD_ILB} --query id -o tsv)
+
 # Create NIC for the VM
 NIC_NAME=fwdvm1nic${RANDOM}
 az network nic create -g az-fwd-rg -n ${NIC_NAME} --vnet-name az-fwd-vnet --subnet be-subnet
@@ -65,6 +70,9 @@ az vm create -g az-fwd-rg --name natvm1 --image UbuntuLTS --admin-user azureuser
 
 # Add NIC to LB
 az network nic ip-config address-pool --address-pool bepool --ip-config-name ipconfig1 --nic-name ${NIC_NAME} -g az-fwd-rg --lb-name FWDILB
+
+# Print PLS ID to use for connection to this PLS
+echo "PLS ID is ${PLS_ID}"
 ```
 2. Creating Forwarding Rule to Endpoint
    * Copy [ip_fwd.sh](ip_fwd.sh) to the Bastion VM and then to each of the  NAT VMs
