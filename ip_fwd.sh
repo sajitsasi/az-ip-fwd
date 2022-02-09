@@ -121,7 +121,7 @@ while [ $INTERVAL ]; do
 	sleep $INTERVAL
 	NEW_DEST_IP=$(resolve ${DEST_HOST})
 	if [ $NEW_DEST_IP != $DEST_IP ]; then
-    update_iptables -D
+		update_iptables -D
 		DEST_IP=$NEW_DEST_IP
 		update_iptables -A
 	fi
