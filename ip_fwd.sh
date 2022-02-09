@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 
 #-------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
@@ -97,11 +97,11 @@ if [ "${UID}" != "0" ]; then
 	exit 1
 fi
 
-#2. Make sure IP Forwarding is enabled in the kernel
+# Make sure IP Forwarding is enabled in the kernel
 echo -e "\e[32mEnabling IP forwarding...\e[0m"
 echo "1" > /proc/sys/net/ipv4/ip_forward
 
-#3. Check if IP or hostname is specified for destination IP
+# Check if IP or hostname is specified for destination IP
 if [[ ${DEST_HOST} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	DEST_IP=${DEST_HOST}
 else
@@ -109,12 +109,14 @@ else
 fi
 echo -e "\e[32mUsing Destination IP ${DEST_IP}\e[0m"
 
-#4. Get local IP
+# Get local IP
 LOCAL_IP=$(ip addr ls ${ETH_IF} | grep -w inet | awk '{print $2}' | awk -F/ '{print $1}')
 echo -e "\e[32mUsing Local IP ${LOCAL_IP}\e[0m"
 
+# Run one update
 update_iptables -A
 
+# If an interval is given, loop and update iptables when the destination IP changes
 while [ $INTERVAL ]; do
 	sleep $INTERVAL
 	NEW_DEST_IP=$(resolve ${DEST_HOST})
@@ -125,4 +127,5 @@ while [ $INTERVAL ]; do
 	fi
 done
 
+# This only runs if an interval wasn't given
 echo -e "\e[32mDone!\e[0m"
