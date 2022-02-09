@@ -21,15 +21,15 @@ resolve() {
 	host ${DEST_HOST} | grep "has address" | awk '{print $NF}'
 }
 
-update_iptables(op) {
+update_iptables() {
 	# Do DNAT
-	echo -e "\e[32mUpdating DNAT rule from ${LOCAL_IP}:${FE_PORT} to ${DEST_IP}:${DEST_PORT}...\e[0m"
-	iptables -t nat $op PREROUTING -p tcp -i ${ETH_IF} --dport ${FE_PORT} -j DNAT --to ${DEST_IP}:${DEST_PORT}
+	echo -e "\e[32mUpdating ($1) DNAT rule from ${LOCAL_IP}:${FE_PORT} to ${DEST_IP}:${DEST_PORT}...\e[0m"
+	iptables -t nat $1 PREROUTING -p tcp -i ${ETH_IF} --dport ${FE_PORT} -j DNAT --to ${DEST_IP}:${DEST_PORT}
 
 	# Do SNAT
-	echo -e "\e[32mUpdating SNAT rule from ${DEST_IP}:${DEST_PORT} to ${LOCAL_IP}:${FE_PORT}...\e[0m"
-	#iptables -t nat $op POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d ${DEST_IP} --to-source ${LOCAL_IP}:${FE_PORT}
-	iptables -t nat $op POSTROUTING -o ${ETH_IF} -j MASQUERADE
+	echo -e "\e[32mUpdating ($1) SNAT rule from ${DEST_IP}:${DEST_PORT} to ${LOCAL_IP}:${FE_PORT}...\e[0m"
+	#iptables -t nat $1 POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d ${DEST_IP} --to-source ${LOCAL_IP}:${FE_PORT}
+	iptables -t nat $1 POSTROUTING -o ${ETH_IF} -j MASQUERADE
 }
 
 if [[ $# -eq 0 ]]; then
