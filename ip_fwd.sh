@@ -26,13 +26,13 @@ EOT
 
 info() {
 	tput setaf 2
-	echo $@
+	echo $(date +"%F %T") $@
 	tput sgr0
 }
 
 error() {
 	tput setaf 1
-	echo "ERROR: $@"
+	echo $(date +"%F %T") ERROR: "$@"
 	tput sgr0
 	echo "Try \`${0} -h\` for more information."
 }
