@@ -172,6 +172,7 @@ info "Using Local IP ${LOCAL_IP}"
 # Do
 if [[ $REMOVE_RULES ]]; then
 	remove_rules $DEST_IP
+	exit
 else
 	install_rules $DEST_IP
 fi
