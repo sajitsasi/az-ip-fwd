@@ -182,7 +182,7 @@ while [ $INTERVAL ]; do
 	OLD_DEST_IP=$DEST_IP
 	resolve ${DEST_HOST}
 	if [ $DEST_IP != $OLD_DEST_IP ]; then
-		info "** Destination IP changed to $NEW_DEST_IP"
+		info "** Destination IP changed to $DEST_IP"
 		remove_rules OLD_DEST_IP
 		install_rules DEST_IP
 	fi
