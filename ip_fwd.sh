@@ -166,7 +166,7 @@ if [[ $IP_FW_ENABLED != 1 ]]; then
 fi
 
 # Get local IP
-LOCAL_IP=$(ip addr ls ${ETH_IF} | grep -w inet | awk '{print $2}' | awk -F/ '{print $1}')
+LOCAL_IP=$(ip addr ls eth0|grep -w inet|sed 's/.*inet \([0-9.]\+\).*/\1/')
 info "Using Local IP ${LOCAL_IP}"
 
 # Do
