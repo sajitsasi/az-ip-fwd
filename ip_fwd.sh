@@ -7,11 +7,6 @@
 
 VERSION="1.0.2"
 
-# Omit escape sequences when not attached to a terminal
-if ! test -t 1 || [ -z ${TERM} ]; then
-	TERM=dumb
-fi
-
 usage() {
 cat << EOT >&2
 $(basename ${0}) v$VERSION
@@ -28,16 +23,13 @@ EOT
 }
 
 info() {
-	tput setaf 2
-	echo $(date +"%F %T") $@
-	tput sgr0
+	echo $(date +"%F %T") "$@"
 }
 
-error() {
-	tput setaf 1
+fail() {
 	echo $(date +"%F %T") ERROR: "$@"
-	tput sgr0
 	echo "Try \`${0} -h\` for more information."
+	exit 1
 }
 
 resolve() {
@@ -45,12 +37,8 @@ resolve() {
 		DEST_IP=${DEST_HOST}
 	else
 		host_out=$(host ${DEST_HOST})
-		if [[ $? == 0 ]]; then
-			DEST_IP=$(host ${DEST_HOST} | head -n 1 | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
-		else
-			error "Cannot resolve host \`$DEST_HOST', aborting"
-			exit 1
-		fi
+		[[ "$?" != 0 ]] && fail "Cannot resolve host \`${DEST_HOST}', aborting"
+		DEST_IP=$(host ${DEST_HOST} | head -n 1 | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
 	fi
 }
 
@@ -95,99 +83,68 @@ remove_rules() {
 }
 
 # Make sure we're running as root
-if [ -z ${UID} ]; then
-	UID=$(id -u)
-fi
-if [ "${UID}" != "0" ]; then
-	error "user must be root"
-	exit 1
-fi
+[ "$(id -u)" != "0" ] && fail "user must be root"
 
-if [[ $# -eq 0 ]]; then
-	error "no options given"
-	exit 1
-fi
-while getopts 'i:f:a:b:s:r' OPTS; do
-	case "${OPTS}" in
-		i)
-			info "Using ethernet interface ${OPTARG}"
-			ETH_IF=${OPTARG}
-			;;
-		f)
-			info "Frontend port is ${OPTARG}"
-			FE_PORT=${OPTARG}
-			;;
-		a)
-			info "Destination host is ${OPTARG}"
-			DEST_HOST=${OPTARG}
-			resolve $DEST_HOST
-			;;
-		b)
-			info "Destination port is ${OPTARG}"
-			DEST_PORT=${OPTARG}
-			;;
-		s)
-			info "Polling interval is ${OPTARG}"
-			INTERVAL=${OPTARG}
-			;;
-		r)
-			REMOVE_RULES=TRUE
-			;;
-		h)
-			usage
-			exit 0
-			;;
-		*)
-			usage
-			exit 1
-			;;
+# Parse command line args
+[[ $# -eq 0 ]] && fail "no options given"
+while getopts 'i:f:a:b:s:rh' OPT; do
+	case "${OPT}" in
+		i) ETH_IF=${OPTARG} ;;
+		f) FE_PORT=${OPTARG} ;;
+		a) DEST_HOST=${OPTARG} ;;
+		b) DEST_PORT=${OPTARG} ;;
+		s) INTERVAL=${OPTARG} ;;
+		r) REMOVE_RULES=yes ;;
+		h) usage; exit 0 ;;
+		*) error "Unrecognized option ${OPT}"; exit 1 ;;
 	esac
 done
+[ -z ${ETH_IF} ] && fail "ethernet interface not specified"
+[ -z ${FE_PORT} ] && fail "frontend port not specified"
+[ -z ${DEST_HOST} ] && fail "destination host not specified"
+[ -z ${DEST_PORT} ] && fail "destination port not specified"
+if [ -n "${INTERVAL}" ]; then
+	[[ "${INTERVAL}" =~ ^[0-9]+$ ]] || fail "interval should be an integer"
+	[ "${INTERVAL}" == "0" ]        && fail "interval should be greater than 0"
+fi
+resolve ${DEST_HOST}
+LOCAL_IP=$(ip addr ls ${ETH_IF}|grep -w inet|sed 's/.*inet \([0-9.]\+\).*/\1/')
 
-if [ -z ${ETH_IF} ]; then
-	error "ethernet interface not specified"
-	exit 1
-fi
-	if [ -z ${FE_PORT} ]; then
-	error "frontend port not specified"
-	exit 1
-fi
-if [ -z ${DEST_HOST} ]; then
-	error "destination host not specified"
-	exit 1
-fi
-if [ -z ${DEST_PORT} ]; then
-	error "destination port not specified"
-	exit 1
-fi
-
-# Make sure IP Forwarding is enabled in the kernel
+# Make sure IP forwarding is enabled in the kernel
 IP_FW_ENABLED=$(cat /proc/sys/net/ipv4/ip_forward)
-if [[ $IP_FW_ENABLED != 1 ]]; then
+if [[ ${IP_FW_ENABLED} != 1 ]]; then
 	info "Enabling IP forwarding..."
 	echo "1" > /proc/sys/net/ipv4/ip_forward
 fi
 
-# Get local IP
-LOCAL_IP=$(ip addr ls eth0|grep -w inet|sed 's/.*inet \([0-9.]\+\).*/\1/')
-info "Using Local IP ${LOCAL_IP}"
-
-# Do
-if [[ $REMOVE_RULES ]]; then
-	remove_rules $DEST_IP
-	exit
-else
-	install_rules $DEST_IP
+info "Forwarding packets on ${ETH_IF}"
+if [ -n "${INTERVAL}" ]; then
+	if [ ${DEST_HOST} =~ '([0-9]{1,3}\.){3}[0-9]{1,3}' ]; then
+		info "${DEST_HOST} is an IP address. -s will be ignored."
+		unset INTERVAL
+	else
+		info "Checking for changes in DNS record for ${DEST_HOST} every ${INTERVAL} seconds"
+	fi
 fi
 
+# Do the work.
+if [ -n "${REMOVE_RULES}" ]; then
+	remove_rules ${DEST_IP}
+else
+	install_rules ${DEST_IP}
+fi
+# If an interval wasn't given, we're done.
+[ -z "${INTERVAL}" ] && exit 0
+
 # If an interval is given, loop and update iptables when the destination IP changes
-while [ $INTERVAL ]; do
-	sleep $INTERVAL
-	OLD_DEST_IP=$DEST_IP
+trap "remove_rules ${DEST_IP}; exit 0" SIGTERM SIGINT SIGHUP SIGQUIT
+while [[ TRUE ]]; do
+	sleep ${INTERVAL}
+	OLD_DEST_IP=${DEST_IP}
 	resolve ${DEST_HOST}
-	if [ $DEST_IP != $OLD_DEST_IP ]; then
-		info "** Destination IP changed to $DEST_IP"
-		remove_rules OLD_DEST_IP
-		install_rules DEST_IP
+	if [ ${DEST_IP} != ${OLD_DEST_IP} ]; then
+		info "** Destination IP changed to ${DEST_IP}"
+		remove_rules ${OLD_DEST_IP}
+		install_rules ${DEST_IP}
 	fi
 done
