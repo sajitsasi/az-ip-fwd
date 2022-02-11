@@ -7,13 +7,16 @@
 
 VERSION="1.0.2"
 
+# Omit escape sequences when not attached to a terminal
+if ! test -t 1 || [ -z ${TERM} ]; then
+	TERM=dumb
+fi
+
 usage() {
 cat << EOT >&2
 $(basename ${0}) v$VERSION
-
 Usage: ${0} -i ETH_IFACE -f FE_PORT -a DEST_HOST -b DEST_PORT [-s <INTERVAL>] [-d]
        ${0} -h (print this help information)
-
 Options:
   -i ETH_IFACE  forward packets arriving on this interface
   -f FE_PORT    forward packets arriving on this port
@@ -188,4 +191,3 @@ while [ $INTERVAL ]; do
 		install_rules DEST_IP
 	fi
 done
-
