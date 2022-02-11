@@ -50,14 +50,14 @@ install_rules() {
 	if iptables -t nat -C $dnat_rulespec >&/dev/null; then
 		info "DNAT rule is already installed, skipping"
 	else
-		info "Installing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT}"
+		info "++ Installing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
 		iptables -t nat -A $dnat_rulespec
 	fi
 
 	if iptables -t nat -C $snat_rulespec >&/dev/null; then
 		info "SNAT rule is already installed, skipping"
 	else
-		info "Installing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT}"
+		info "++ Installing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
 		iptables -t nat -A $snat_rulespec
 	fi
 }
@@ -68,14 +68,14 @@ remove_rules() {
 	#snat_rulespec="POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d $1 --to-source ${LOCAL_IP}:${FE_PORT}"
 
 	if iptables -t nat -C $dnat_rulespec >&/dev/null; then
-	info "-- Removing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT}"
+	info "-- Removing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
 		iptables -t nat -D $dnat_rulespec
 	else
 		info "DNAT rule is not present, ignoring"
 	fi
 
 	if iptables -t nat -C $snat_rulespec >&/dev/null; then
-	    info "-- Removing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT}"
+	    info "-- Removing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
 		iptables -t nat -D $snat_rulespec
 	else
 		info "SNAT rule is not present, ignoring"
@@ -117,19 +117,17 @@ if [[ ${IP_FW_ENABLED} != 1 ]]; then
 	echo "1" > /proc/sys/net/ipv4/ip_forward
 fi
 
-info "Forwarding packets on ${ETH_IF}"
 if [ -n "${INTERVAL}" ]; then
 	if [[ ${DEST_HOST} =~ '([0-9]{1,3}\.){3}[0-9]{1,3}' ]]; then
 		info "${DEST_HOST} is an IP address. -s will be ignored."
 		unset INTERVAL
-	else
-		info "Checking for changes in DNS record for ${DEST_HOST} every ${INTERVAL} seconds"
 	fi
 fi
 
 # Do the work.
 if [ -n "${REMOVE_RULES}" ]; then
 	remove_rules ${DEST_IP}
+	exit 0
 else
 	install_rules ${DEST_IP}
 fi
@@ -138,6 +136,7 @@ fi
 
 # If an interval is given, loop and update iptables when the destination IP changes
 trap "remove_rules ${DEST_IP}; exit 0" SIGTERM SIGINT SIGHUP SIGQUIT
+info "Will resolve '${DEST_HOST}' every ${INTERVAL} second(s)"
 while [[ TRUE ]]; do
 	sleep ${INTERVAL}
 	OLD_DEST_IP=${DEST_IP}
