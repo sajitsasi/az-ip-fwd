@@ -119,7 +119,7 @@ fi
 
 info "Forwarding packets on ${ETH_IF}"
 if [ -n "${INTERVAL}" ]; then
-	if [ ${DEST_HOST} =~ '([0-9]{1,3}\.){3}[0-9]{1,3}' ]; then
+	if [[ ${DEST_HOST} =~ '([0-9]{1,3}\.){3}[0-9]{1,3}' ]]; then
 		info "${DEST_HOST} is an IP address. -s will be ignored."
 		unset INTERVAL
 	else
