@@ -175,5 +175,5 @@ echo "Bastion Public IP is: $(az vm show -d -g az-fwd-rg -n bastionvm --query pu
      ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN/IP> -b 1433 -r```
    * To have the script continuously check for changes in how FQDN resolves, provide the ```-s <INTERVAL>``` parameter. For example,
      ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN> -b 1433 -s 5```
-     will resolve the FQDN every 5 seconds and update the rules if it resolves to a different IP. This is useful when the remote server or service uses DNS to announce IP address change following an update, network reconfiguration, or a failover.
+     will resolve the FQDN every 5 seconds and update the rules if it resolves to a different IP. This is useful when the backend service uses DNS to announce IP address change following an update, network reconfiguration, or a failover.
 
