@@ -170,7 +170,10 @@ echo "Bastion Public IP is: $(az vm show -d -g az-fwd-rg -n bastionvm --query pu
    * Copy [ip_fwd.sh](ip_fwd.sh) to the Bastion VM and then to each of the  NAT VMs
    * Run the script on each VM with the following options:  
      ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN/IP> -b 1433```  
-     This will forward packets coming in on Ethernet Interface ```eth0``` on port ```1433``` to the ```Destination FQDN or IP of the on-prem SQL Server``` on port ```1433```
-
-
+     This will forward packets coming in on Ethernet Interface ```eth0``` on port ```1433``` to the destination FQDN or IP of the on-prem SQL Server on port ```1433```.
+   * To remove the rules, run the script with the ```-r``` parameter:
+     ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN/IP> -b 1433 -r```
+   * To have the script continuously check for changes in how FQDN resolves, provide the ```-s <INTERVAL>``` parameter. For example,
+     ```sudo ./ip_fwd.sh -i eth0 -f 1433 -a <FQDN> -b 1433 -s 5```
+     will resolve the FQDN every 5 seconds and update the rules if it resolves to a different IP. This is useful when the backend service uses DNS to announce IP address change following an update, network reconfiguration, or a failover.
 

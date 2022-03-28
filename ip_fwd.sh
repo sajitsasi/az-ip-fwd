@@ -5,100 +5,144 @@
 # Licensed under the MIT License. 
 #--------------------------------------------------------------------------
 
+VERSION="1.0.2"
+
 usage() {
-	echo -e "\e[33m"
-	echo "usage: ${0} [-i <eth_interface>] [-f <frontend_port>] [-a <dest_ip_addr>] [-b <dest_port>]" 1>&2
-	echo "where:" 1>&2
-	echo "<eth_interface>: Interface on which packet will arrive and be forwarded" 1>&2
-	echo "<frontend_port>: Frontend port on which packet arrives" 1>&2
-	echo "<dest_port>    : Destination port to which packet is forwarded" 1>&2
-	echo "<dest_ip_addr> : Destination IP which packet is forwarded" 1>&2
-	echo -e "\e[0m"
+cat << EOT >&2
+$(basename ${0}) v$VERSION
+Usage: ${0} -i ETH_IFACE -f FE_PORT -a DEST_HOST -b DEST_PORT [-s <INTERVAL>] [-d]
+       ${0} -h (print this help information)
+Options:
+  -i ETH_IFACE  forward packets arriving on this interface
+  -f FE_PORT    forward packets arriving on this port
+  -a DEST_HOST  destination host to forward packets to
+  -b DEST_PORT  destination port to forward packets to
+  -s INTERVAL   do not terminate, sleep and update the rules if destination host IP changed
+  -r            remove rules (ignores -s)
+EOT
 }
 
-if [[ $# -eq 0 ]]; then
-	echo -e "\e[31mERROR: no options given\e[0m"
-	usage
+info() {
+	echo $(date +"%F %T") "$@"
+}
+
+fail() {
+	echo $(date +"%F %T") ERROR: "$@"
+	echo "Try \`${0} -h\` for more information."
 	exit 1
-fi
-while getopts 'i:f:a:b:' OPTS; do
-	case "${OPTS}" in
-		i)
-			echo -e "\e[32mUsing ethernet interface ${OPTARG}\e[0m"
-			ETH_IF=${OPTARG}
-			;;
-		f)
-			echo -e "\e[32mFrontend port is ${OPTARG}\e[0m"
-			FE_PORT=${OPTARG}
-			;;
-		a)
-			echo -e "\e[32mDestination IP Address is ${OPTARG}\e[0m"
-			DEST_HOST=${OPTARG}
-			;;
-		b)
-			echo -e "\e[32mDestination Port is ${OPTARG}\e[0m"
-			DEST_PORT=${OPTARG}
-			;;
-		*)
-			usage
-			exit 1
-			;;
+}
+
+resolve() {
+	if [[ ${DEST_HOST} =~ ^([0-9]{1,3}\.){3}[0-9]{3}$ ]]; then
+		DEST_IP=${DEST_HOST}
+	else
+		DEST_IP=$(getent hosts ${DEST_HOST} | cut -f1 -d' ')
+		[[ "$?" != 0 ]] && fail "Cannot resolve host \`${DEST_HOST}', aborting"
+	fi
+}
+
+install_rules() {
+	dnat_rulespec="PREROUTING -p tcp -i ${ETH_IF} --dport ${FE_PORT} -j DNAT --to $1:${DEST_PORT}"
+	snat_rulespec="POSTROUTING -o ${ETH_IF} -j MASQUERADE"
+	#snat_rulespec="POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d $1 --to-source ${LOCAL_IP}:${FE_PORT}"
+
+	if iptables -t nat -C $dnat_rulespec >&/dev/null; then
+		info "DNAT rule is already installed, skipping"
+	else
+		info "++ Installing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
+		iptables -t nat -A $dnat_rulespec
+	fi
+
+	if iptables -t nat -C $snat_rulespec >&/dev/null; then
+		info "SNAT rule is already installed, skipping"
+	else
+		info "++ Installing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
+		iptables -t nat -A $snat_rulespec
+	fi
+}
+
+remove_rules() {
+	dnat_rulespec="PREROUTING -p tcp -i ${ETH_IF} --dport ${FE_PORT} -j DNAT --to $1:${DEST_PORT}"
+	snat_rulespec="POSTROUTING -o ${ETH_IF} -j MASQUERADE"
+	#snat_rulespec="POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d $1 --to-source ${LOCAL_IP}:${FE_PORT}"
+
+	if iptables -t nat -C $dnat_rulespec >&/dev/null; then
+	info "-- Removing DNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
+		iptables -t nat -D $dnat_rulespec
+	else
+		info "DNAT rule is not present, ignoring"
+	fi
+
+	if iptables -t nat -C $snat_rulespec >&/dev/null; then
+	    info "-- Removing SNAT rule ${LOCAL_IP}:${FE_PORT} -> $1:${DEST_PORT} (${ETH_IF})"
+		iptables -t nat -D $snat_rulespec
+	else
+		info "SNAT rule is not present, ignoring"
+	fi
+}
+
+# Make sure we're running as root
+[ "$(id -u)" != "0" ] && fail "user must be root"
+
+# Parse command line args
+[[ $# -eq 0 ]] && fail "no options given"
+while getopts 'i:f:a:b:s:rh' OPT; do
+	case "${OPT}" in
+		i) ETH_IF=${OPTARG} ;;
+		f) FE_PORT=${OPTARG} ;;
+		a) DEST_HOST=${OPTARG} ;;
+		b) DEST_PORT=${OPTARG} ;;
+		s) INTERVAL=${OPTARG} ;;
+		r) REMOVE_RULES=yes ;;
+		h) usage; exit 0 ;;
+		*) error "Unrecognized option ${OPT}"; exit 1 ;;
 	esac
 done
+[ -z ${ETH_IF} ] && fail "ethernet interface not specified"
+[ -z ${FE_PORT} ] && fail "frontend port not specified"
+[ -z ${DEST_HOST} ] && fail "destination host not specified"
+[ -z ${DEST_PORT} ] && fail "destination port not specified"
+if [ -n "${INTERVAL}" ]; then
+	[[ "${INTERVAL}" =~ ^[0-9]+$ ]] || fail "interval should be an integer"
+	[ "${INTERVAL}" == "0" ]        && fail "interval should be greater than 0"
+fi
+resolve ${DEST_HOST}
+LOCAL_IP=$(ip addr ls ${ETH_IF}|grep -w inet|sed 's/.*inet \([0-9.]\+\).*/\1/')
 
-if [ -z ${ETH_IF} ]; then
-	echo -e "\e[31mERROR: ethernet interface not specified!!!\e[0m"
-	usage
-	exit 1
-fi
-if [ -z ${FE_PORT} ]; then
-	echo -e "\e[31mERROR: frontend port not specified!!!\e[0m"
-	usage
-	exit 1
-fi
-if [ -z ${DEST_HOST} ]; then
-	echo -e "\e[31mERROR: destination IP not specified!!!\e[0m"
-	usage
-	exit 1
-fi
-if [ -z ${DEST_PORT} ]; then
-	echo -e "\e[31mERROR: destination port not specified!!!\e[0m"
-	usage
-	exit 1
+# Make sure IP forwarding is enabled in the kernel
+IP_FW_ENABLED=$(cat /proc/sys/net/ipv4/ip_forward)
+if [[ ${IP_FW_ENABLED} != 1 ]]; then
+	info "Enabling IP forwarding..."
+	echo "1" > /proc/sys/net/ipv4/ip_forward
 fi
 
-#1. Make sure you're root
-echo -e "\e[32mChecking whether we're root...\e[0m"
-if [ -z ${UID} ]; then
-	UID=$(id -u)
-fi
-if [ "${UID}" != "0" ]; then
-	echo -e "\e[31mERROR: user must be root\e[0m"
-	exit 1
+if [ -n "${INTERVAL}" ]; then
+	if [[ ${DEST_HOST} =~ '([0-9]{1,3}\.){3}[0-9]{1,3}' ]]; then
+		info "${DEST_HOST} is an IP address. -s will be ignored."
+		unset INTERVAL
+	fi
 fi
 
-#2. Make sure IP Forwarding is enabled in the kernel
-echo -e "\e[32mEnabling IP forwarding...\e[0m"
-echo "1" > /proc/sys/net/ipv4/ip_forward
-
-#3. Check if IP or hostname is specified for destination IP
-if [[ ${DEST_HOST} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-	DEST_IP=${DEST_HOST}
+# Do the work.
+if [ -n "${REMOVE_RULES}" ]; then
+	remove_rules ${DEST_IP}
+	exit 0
 else
-	DEST_IP=$(host ${DEST_HOST} | grep "has address" | awk '{print $NF}')
+	install_rules ${DEST_IP}
 fi
-echo -e "\e[32mUsing Destination IP ${DEST_IP}\e[0m"
+# If an interval wasn't given, we're done.
+[ -z "${INTERVAL}" ] && exit 0
 
-#4. Get local IP
-LOCAL_IP=$(ip addr ls ${ETH_IF} | grep -w inet | awk '{print $2}' | awk -F/ '{print $1}')
-echo -e "\e[32mUsing Local IP ${LOCAL_IP}\e[0m"
-
-#4. Do DNAT
-echo -e "\e[32mCreating DNAT rule from ${LOCAL_IP}:${FE_PORT} to ${DEST_IP}:${DEST_PORT}...\e[0m"
-iptables -t nat -A PREROUTING -p tcp -i ${ETH_IF} --dport ${FE_PORT} -j DNAT --to ${DEST_IP}:${DEST_PORT}
-
-#4. Do SNAT
-echo -e "\e[32mCreating SNAT rule from ${DEST_IP}:${DEST_PORT} to ${LOCAL_IP}:${FE_PORT}...\e[0m"
-#iptables -t nat -A POSTROUTING -p tcp -o ${ETH_IF} --dport ${DEST_PORT} -j SNAT -d ${DEST_IP} --to-source ${LOCAL_IP}:${FE_PORT}
-iptables -t nat -A POSTROUTING -o ${ETH_IF} -j MASQUERADE
-echo -e "\e[32mDone!\e[0m"
+# If an interval is given, loop and update iptables when the destination IP changes
+trap "remove_rules ${DEST_IP}; exit 0" SIGTERM SIGINT SIGHUP SIGQUIT
+info "Will resolve '${DEST_HOST}' every ${INTERVAL} second(s)"
+while [[ TRUE ]]; do
+	sleep ${INTERVAL}
+	OLD_DEST_IP=${DEST_IP}
+	resolve ${DEST_HOST}
+	if [ ${DEST_IP} != ${OLD_DEST_IP} ]; then
+		info "** Destination IP changed to ${DEST_IP}"
+		remove_rules ${OLD_DEST_IP}
+		install_rules ${DEST_IP}
+	fi
+done
