@@ -36,9 +36,8 @@ resolve() {
 	if [[ ${DEST_HOST} =~ ^([0-9]{1,3}\.){3}[0-9]{3}$ ]]; then
 		DEST_IP=${DEST_HOST}
 	else
-		host_out=$(host ${DEST_HOST})
+		DEST_IP=$(getent hosts ${DEST_HOST} | cut -f1 -d' ')
 		[[ "$?" != 0 ]] && fail "Cannot resolve host \`${DEST_HOST}', aborting"
-		DEST_IP=$(host ${DEST_HOST} | head -n 1 | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
 	fi
 }
 
