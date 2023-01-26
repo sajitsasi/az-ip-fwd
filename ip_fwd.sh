@@ -80,6 +80,8 @@ fi
 #2. Make sure IP Forwarding is enabled in the kernel
 echo -e "\e[32mEnabling IP forwarding...\e[0m"
 echo "1" > /proc/sys/net/ipv4/ip_forward
+# To make this changes presistance across the reboot. 
+sed -i '/net.ipv4.ip_forward=1/s/^#//g' /etc/sysctl.conf
 
 #3. Check if IP or hostname is specified for destination IP
 if [[ ${DEST_HOST} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
